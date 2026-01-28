@@ -2,6 +2,17 @@
 
 All notable changes to the "Unity Reference CodeLens" extension will be documented in this file.
 
+## [1.1.0] - 2026-01-28
+
+### Added
+- **Class References**: CodeLens now shows on class declarations indicating which scenes/prefabs use this script
+- New command: Show Script References - displays all GameObjects using the script
+- Hierarchy path display for script component references
+
+### Improved
+- Better parsing of Unity MonoBehaviour components
+- Enhanced reference indexing performance
+
 ## [1.0.0] - 2026-01-28
 
 ### Added

@@ -6,11 +6,12 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MethodReference, UnityFileCache, ReferenceIndex } from './types';
-import { parseUnityFile, extractGuidFromMeta } from './unityParser';
+import { MethodReference, ScriptReference, UnityFileCache, ReferenceIndex } from './types';
+import { parseUnityFile, parseUnityFileForScripts, extractGuidFromMeta } from './unityParser';
 
 export class ReferenceIndexService {
     private index: ReferenceIndex = new Map();
+    private scriptIndex: Map<string, ScriptReference[]> = new Map(); // scriptGuid -> script usages
     private fileCache: Map<string, UnityFileCache> = new Map();
     private scriptGuidMap: Map<string, string> = new Map(); // scriptPath -> guid
     private guidToScriptPath: Map<string, string> = new Map(); // guid -> scriptPath
@@ -56,6 +57,7 @@ export class ReferenceIndexService {
 
         this.isIndexing = true;
         this.index.clear();
+        this.scriptIndex.clear();
         this.fileCache.clear();
 
         try {
@@ -238,13 +240,12 @@ export class ReferenceIndexService {
                 return;
             }
 
-            // Parse the file
+            // Parse the file for method references
             const references = parseUnityFile(filePath);
             
-            if (references.length > 0) {
-                console.log(`[UnityRefLens] Found ${references.length} refs in ${path.basename(filePath)}:`,
-                    references.map(r => `${r.methodName}(${r.referenceType})`));
-            }
+            // Parse the file for script references (class usage)
+            const scriptRefs = parseUnityFileForScripts(filePath);
+            this.addScriptReferencesToIndex(scriptRefs);
 
             // Update cache
             this.fileCache.set(filePath, {
@@ -257,6 +258,17 @@ export class ReferenceIndexService {
             this.addReferencesToIndex(references);
         } catch (error) {
             console.error(`[UnityRefLens] Error indexing ${filePath}:`, error);
+        }
+    }
+
+    /**
+     * Add script references to the script index
+     */
+    private addScriptReferencesToIndex(refs: ScriptReference[]): void {
+        for (const ref of refs) {
+            const existing = this.scriptIndex.get(ref.scriptGuid) || [];
+            existing.push(ref);
+            this.scriptIndex.set(ref.scriptGuid, existing);
         }
     }
 
@@ -343,6 +355,15 @@ export class ReferenceIndexService {
         }
 
         return result;
+    }
+
+    /**
+     * Get all references where a script is attached to GameObjects
+     * @param scriptGuid The GUID of the script
+     * @returns Array of script references
+     */
+    public getScriptReferences(scriptGuid: string): ScriptReference[] {
+        return this.scriptIndex.get(scriptGuid) || [];
     }
 
     /**

@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { UnityReferenceCodeLensProvider, showReferencesCommand } from './codeLensProvider';
+import { UnityReferenceCodeLensProvider, showReferencesCommand, showScriptReferencesCommand } from './codeLensProvider';
 import { getReferenceIndexService, disposeReferenceIndexService } from './referenceIndex';
 
 let codeLensProvider: UnityReferenceCodeLensProvider | undefined;
@@ -24,6 +24,13 @@ export async function activate(context: vscode.ExtensionContext) {
         showReferencesCommand
     );
     context.subscriptions.push(showReferencesCmd);
+
+    // Register command to show script references (class usage)
+    const showScriptRefsCmd = vscode.commands.registerCommand(
+        'unity-reference-code-lens.showScriptReferences',
+        showScriptReferencesCommand
+    );
+    context.subscriptions.push(showScriptRefsCmd);
 
     // Register command to rebuild index
     const rebuildIndexCmd = vscode.commands.registerCommand(

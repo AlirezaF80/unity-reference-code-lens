@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { MethodReference } from './types';
+import { MethodReference, ScriptReference } from './types';
 
 /** Represents a parsed Unity object */
 interface UnityObject {
@@ -382,4 +382,75 @@ export function hasScriptReference(filePath: string, scriptGuid: string): boolea
 
     const content = fs.readFileSync(filePath, 'utf8');
     return content.includes(scriptGuid);
+}
+
+/**
+ * Parse a Unity file and extract all script component references (MonoBehaviour)
+ * @param filePath Path to the Unity file
+ * @returns Array of script references found in the file
+ */
+export function parseUnityFileForScripts(filePath: string): ScriptReference[] {
+    const references: ScriptReference[] = [];
+    
+    if (!fs.existsSync(filePath)) {
+        return references;
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n');
+    const fileName = path.basename(filePath);
+    const fileType: 'scene' | 'prefab' = filePath.endsWith('.unity') ? 'scene' : 'prefab';
+
+    // Build object map for hierarchy
+    const objectMap = buildObjectMap(lines);
+
+    // Find all MonoBehaviour components (classId 114)
+    const objectHeaderRegex = /^--- !u!114\s*&(\d+)/;
+    const scriptGuidRegex = /m_Script:\s*\{fileID:\s*\d+,\s*guid:\s*([a-f0-9]+)/;
+    const gameObjectRefRegex = /m_GameObject:\s*\{fileID:\s*(\d+)/;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Check for MonoBehaviour header (classId 114)
+        const headerMatch = line.match(objectHeaderRegex);
+        if (headerMatch) {
+            let scriptGuid: string | undefined;
+            let gameObjectFileId: string | undefined;
+
+            // Look for script GUID and GameObject reference in the next few lines
+            for (let j = i + 1; j < Math.min(i + 20, lines.length); j++) {
+                const nextLine = lines[j];
+                if (nextLine.startsWith('---')) break;
+
+                const guidMatch = nextLine.match(scriptGuidRegex);
+                if (guidMatch) {
+                    scriptGuid = guidMatch[1];
+                }
+
+                const goRefMatch = nextLine.match(gameObjectRefRegex);
+                if (goRefMatch) {
+                    gameObjectFileId = goRefMatch[1];
+                }
+            }
+
+            // If we found a valid script GUID, add the reference
+            if (scriptGuid && scriptGuid !== '0') {
+                const gameObjectInfo = gameObjectFileId ? objectMap.get(gameObjectFileId) : undefined;
+                const hierarchyPath = gameObjectFileId ? buildHierarchyPath(gameObjectFileId, objectMap) : undefined;
+
+                references.push({
+                    scriptGuid,
+                    filePath,
+                    fileName,
+                    fileType,
+                    gameObjectName: gameObjectInfo?.name,
+                    hierarchyPath,
+                    lineNumber: i + 1
+                });
+            }
+        }
+    }
+
+    return references;
 }

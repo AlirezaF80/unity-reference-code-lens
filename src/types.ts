@@ -26,6 +26,24 @@ export interface MethodReference {
     lineNumber?: number;
 }
 
+/** Represents a reference to a C# script (class) attached to a GameObject */
+export interface ScriptReference {
+    /** GUID of the script */
+    scriptGuid: string;
+    /** Path to the Unity file (.unity, .prefab) */
+    filePath: string;
+    /** Name of the file without path */
+    fileName: string;
+    /** Type of Unity file */
+    fileType: 'scene' | 'prefab';
+    /** Name of the GameObject the script is attached to */
+    gameObjectName?: string;
+    /** Hierarchy path to the GameObject */
+    hierarchyPath?: string;
+    /** Line number in the Unity file where the script component was found */
+    lineNumber?: number;
+}
+
 /** Represents a parsed C# method in a file */
 export interface CSharpMethod {
     /** Method name */
@@ -40,6 +58,22 @@ export interface CSharpMethod {
     signature: string;
     /** Access modifier */
     accessModifier: 'public' | 'private' | 'protected' | 'internal' | '';
+}
+
+/** Represents a parsed C# class declaration */
+export interface CSharpClass {
+    /** Class name */
+    name: string;
+    /** Line number where the class is declared (0-based) */
+    line: number;
+    /** Start character position */
+    startChar: number;
+    /** End character position */
+    endChar: number;
+    /** Access modifier */
+    accessModifier: 'public' | 'private' | 'protected' | 'internal' | '';
+    /** Base class or interfaces */
+    baseTypes?: string[];
 }
 
 /** Cache entry for a Unity file's references */

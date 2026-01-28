@@ -3,7 +3,7 @@
  * Parses C# files to extract method declarations with their positions
  */
 
-import { CSharpMethod } from './types';
+import { CSharpMethod, CSharpClass } from './types';
 
 /**
  * Parse a C# file content and extract all method declarations
@@ -121,4 +121,49 @@ export function getUnityCallableMethods(content: string): CSharpMethod[] {
     // Unity can call public and private methods via SendMessage/Invoke
     // But UnityEvents typically call public methods
     return methods.filter(m => m.accessModifier === 'public' || m.accessModifier === '');
+}
+
+/**
+ * Parse a C# file content and extract class declarations
+ * @param content The content of the C# file
+ * @returns Array of parsed classes with their positions
+ */
+export function parseCSharpClasses(content: string): CSharpClass[] {
+    const classes: CSharpClass[] = [];
+    const lines = content.split('\n');
+
+    // Regex to match class declarations
+    // Matches: [access] [partial] [abstract/sealed] class ClassName [: BaseClass, IInterface]
+    const classRegex = /^(\s*)(public|private|protected|internal)?\s*(partial\s+)?(abstract\s+|sealed\s+)?class\s+(\w+)(?:<[^>]+>)?(?:\s*:\s*(.+?))?(?:\s*\{|\s*$)/;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const match = line.match(classRegex);
+
+        if (match) {
+            const accessModifier = (match[2] as CSharpClass['accessModifier']) || '';
+            const className = match[5];
+            const baseTypesStr = match[6];
+
+            const startChar = match[1].length;
+            const endChar = line.length;
+
+            // Parse base types
+            let baseTypes: string[] | undefined;
+            if (baseTypesStr) {
+                baseTypes = baseTypesStr.split(',').map(t => t.trim()).filter(t => t);
+            }
+
+            classes.push({
+                name: className,
+                line: i,
+                startChar,
+                endChar,
+                accessModifier,
+                baseTypes
+            });
+        }
+    }
+
+    return classes;
 }
