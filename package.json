@@ -1,0 +1,116 @@
+{
+  "name": "unity-reference-code-lens",
+  "displayName": "Unity Reference CodeLens",
+  "description": "Shows Unity references (prefabs, scenes, buttons, GameObjects) on C# methods as CodeLens",
+  "version": "1.0.0",
+  "publisher": "AkiraGameDev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CQuangX/unity-reference-code-lens"
+  },
+  "bugs": {
+    "url": "https://github.com/CQuangX/unity-reference-code-lens/issues"
+  },
+  "homepage": "https://github.com/CQuangX/unity-reference-code-lens#readme",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.108.1"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "unity",
+    "unity3d",
+    "csharp",
+    "references",
+    "codelens",
+    "prefab",
+    "scene",
+    "game development",
+    "gamedev"
+  ],
+  "activationEvents": [
+    "onLanguage:csharp",
+    "workspaceContains:**/*.unity",
+    "workspaceContains:**/*.prefab"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "unity-reference-code-lens.showReferences",
+        "title": "Show Unity References",
+        "category": "Unity"
+      },
+      {
+        "command": "unity-reference-code-lens.rebuildIndex",
+        "title": "Rebuild Reference Index",
+        "category": "Unity"
+      },
+      {
+        "command": "unity-reference-code-lens.showStatus",
+        "title": "Show Index Status",
+        "category": "Unity"
+      }
+    ],
+    "configuration": {
+      "title": "Unity Reference CodeLens",
+      "properties": {
+        "unityReferenceLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Unity Reference CodeLens"
+        },
+        "unityReferenceLens.showDetailedInfo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show detailed file names instead of just reference count"
+        },
+        "unityReferenceLens.maxInlineReferences": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum number of file names to show inline before collapsing"
+        },
+        "unityReferenceLens.excludeFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "Library",
+            "Temp",
+            "Logs",
+            "obj"
+          ],
+          "description": "Folders to exclude from scanning"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.108.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.52.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
