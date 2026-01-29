@@ -439,15 +439,24 @@ export function parseUnityFileForScripts(filePath: string): ScriptReference[] {
                 const gameObjectInfo = gameObjectFileId ? objectMap.get(gameObjectFileId) : undefined;
                 const hierarchyPath = gameObjectFileId ? buildHierarchyPath(gameObjectFileId, objectMap) : undefined;
 
-                references.push({
-                    scriptGuid,
-                    filePath,
-                    fileName,
-                    fileType,
-                    gameObjectName: gameObjectInfo?.name,
-                    hierarchyPath,
-                    lineNumber: i + 1
-                });
+                // Check for duplicate - same script on same GameObject
+                const isDuplicate = references.some(r => 
+                    r.scriptGuid === scriptGuid && 
+                    r.gameObjectName === gameObjectInfo?.name &&
+                    r.hierarchyPath === hierarchyPath
+                );
+
+                if (!isDuplicate) {
+                    references.push({
+                        scriptGuid,
+                        filePath,
+                        fileName,
+                        fileType,
+                        gameObjectName: gameObjectInfo?.name,
+                        hierarchyPath,
+                        lineNumber: i + 1
+                    });
+                }
             }
         }
     }

@@ -263,12 +263,23 @@ export class ReferenceIndexService {
 
     /**
      * Add script references to the script index
+     * Deduplicates by filePath + hierarchyPath to avoid counting same GameObject multiple times
      */
     private addScriptReferencesToIndex(refs: ScriptReference[]): void {
         for (const ref of refs) {
             const existing = this.scriptIndex.get(ref.scriptGuid) || [];
-            existing.push(ref);
-            this.scriptIndex.set(ref.scriptGuid, existing);
+            
+            // Check for duplicates - same file + same hierarchy path = same reference
+            const isDuplicate = existing.some(e => 
+                e.filePath === ref.filePath && 
+                (e.hierarchyPath === ref.hierarchyPath || 
+                 (e.gameObjectName === ref.gameObjectName && e.lineNumber === ref.lineNumber))
+            );
+            
+            if (!isDuplicate) {
+                existing.push(ref);
+                this.scriptIndex.set(ref.scriptGuid, existing);
+            }
         }
     }
 

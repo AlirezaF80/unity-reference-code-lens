@@ -2,6 +2,12 @@
 
 All notable changes to the "Unity Reference CodeLens" extension will be documented in this file.
 
+## [1.1.1] - 2026-01-29
+
+### Fixed
+- Fixed duplicate references showing for the same script on the same GameObject
+- Improved deduplication logic for script component references
+
 ## [1.1.0] - 2026-01-28
 
 ### Added
