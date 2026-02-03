@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MethodReference, ScriptReference, UnityFileCache, ReferenceIndex } from './types';
-import { parseUnityFile, parseUnityFileForScripts, extractGuidFromMeta } from './unityParser';
+import { parseUnityFile, parseUnityFileForScripts, extractGuidFromMeta, detectPrefabVariant } from './unityParser';
 
 export class ReferenceIndexService {
     private index: ReferenceIndex = new Map();
@@ -15,6 +15,9 @@ export class ReferenceIndexService {
     private fileCache: Map<string, UnityFileCache> = new Map();
     private scriptGuidMap: Map<string, string> = new Map(); // scriptPath -> guid
     private guidToScriptPath: Map<string, string> = new Map(); // guid -> scriptPath
+    private prefabGuidToPath: Map<string, string> = new Map(); // prefab guid -> file path
+    private prefabScripts: Map<string, string[]> = new Map(); // prefab file path -> script guids
+    private variantSources: Map<string, string> = new Map(); // variant file path -> source prefab guid
     private isIndexing = false;
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private _onIndexUpdated = new vscode.EventEmitter<void>();
@@ -59,6 +62,9 @@ export class ReferenceIndexService {
         this.index.clear();
         this.scriptIndex.clear();
         this.fileCache.clear();
+        this.prefabGuidToPath.clear();
+        this.prefabScripts.clear();
+        this.variantSources.clear();
 
         try {
             // First, detect Unity project roots from open editors and workspace
@@ -67,9 +73,13 @@ export class ReferenceIndexService {
             // Build the script GUID map
             progress?.report({ message: 'Scanning .meta files...', increment: 0 });
             await this.buildScriptGuidMap();
+            
+            // Build prefab GUID map (prefab guid -> file path)
+            progress?.report({ message: 'Building prefab GUID map...', increment: 5 });
+            await this.buildPrefabGuidMap();
 
             // Find all Unity files from detected project roots
-            progress?.report({ message: 'Finding Unity files...', increment: 10 });
+            progress?.report({ message: 'Finding Unity files...', increment: 5 });
             const unityFiles = await this.findUnityFiles();
             
             console.log(`[UnityRefLens] Found ${unityFiles.length} Unity files to index`);
@@ -77,15 +87,20 @@ export class ReferenceIndexService {
             const totalFiles = unityFiles.length;
             let processed = 0;
 
+            // First pass: index all files and collect variant info
             for (const filePath of unityFiles) {
                 progress?.report({
                     message: `Parsing ${path.basename(filePath)}...`,
-                    increment: totalFiles > 0 ? (80 / totalFiles) : 0
+                    increment: totalFiles > 0 ? (60 / totalFiles) : 0
                 });
 
                 await this.indexFile(filePath);
                 processed++;
             }
+            
+            // Second pass: resolve variant scripts from source prefabs
+            progress?.report({ message: 'Resolving variant scripts...', increment: 10 });
+            await this.resolveVariantScripts();
 
             progress?.report({ message: 'Index complete!', increment: 10 });
             console.log(`[UnityRefLens] Indexed ${processed} files, found ${this.getTotalReferenceCount()} references`);
@@ -225,6 +240,94 @@ export class ReferenceIndexService {
     }
 
     /**
+     * Build a map of prefab GUIDs to their file paths
+     */
+    private async buildPrefabGuidMap(): Promise<void> {
+        for (const projectRoot of this.unityProjectRoots) {
+            const assetsPath = path.join(projectRoot, 'Assets');
+            if (fs.existsSync(assetsPath)) {
+                await this.scanDirectoryForPrefabMetaFiles(assetsPath);
+            }
+        }
+        console.log(`[UnityRefLens] Mapped ${this.prefabGuidToPath.size} prefab GUIDs`);
+    }
+
+    /**
+     * Recursively scan directory for .prefab.meta files
+     */
+    private async scanDirectoryForPrefabMetaFiles(dir: string): Promise<void> {
+        try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            
+            for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                
+                if (entry.isDirectory()) {
+                    if (!['Library', 'Temp', 'Logs', 'obj', 'Build', 'Builds'].includes(entry.name)) {
+                        await this.scanDirectoryForPrefabMetaFiles(fullPath);
+                    }
+                } else if (entry.isFile() && entry.name.endsWith('.prefab.meta')) {
+                    const guid = extractGuidFromMeta(fullPath);
+                    if (guid) {
+                        const prefabPath = fullPath.replace('.meta', '');
+                        this.prefabGuidToPath.set(guid, prefabPath);
+                    }
+                }
+            }
+        } catch (error) {
+            // Ignore errors for inaccessible directories
+        }
+    }
+
+    /**
+     * Resolve inherited scripts for prefab variants from their source prefabs
+     */
+    private async resolveVariantScripts(): Promise<void> {
+        console.log(`[UnityRefLens] Resolving scripts for ${this.variantSources.size} variants`);
+
+        // For each variant, find its source prefab and add inherited scripts
+        for (const [variantPath, sourcePrefabGuid] of this.variantSources) {
+            const sourcePrefabPath = this.prefabGuidToPath.get(sourcePrefabGuid);
+            if (!sourcePrefabPath) {
+                console.log(`[UnityRefLens] Could not find source prefab for variant ${path.basename(variantPath)}, guid: ${sourcePrefabGuid}`);
+                continue;
+            }
+
+            console.log(`[UnityRefLens] Resolving variant ${path.basename(variantPath)} from source ${path.basename(sourcePrefabPath)}`);
+
+            // Get script references from the source prefab
+            const sourceScriptRefs = parseUnityFileForScripts(sourcePrefabPath);
+            const variantFileName = path.basename(variantPath);
+            
+            // Add these scripts as references to the variant (as inherited scripts)
+            for (const sourceRef of sourceScriptRefs) {
+                const existing = this.scriptIndex.get(sourceRef.scriptGuid) || [];
+                
+                // Check if variant already has this script directly
+                const alreadyHasScript = existing.some(e => 
+                    e.filePath === variantPath && e.scriptGuid === sourceRef.scriptGuid
+                );
+                
+                if (!alreadyHasScript) {
+                    // Add as inherited reference
+                    existing.push({
+                        ...sourceRef,
+                        filePath: variantPath,
+                        fileName: variantFileName,
+                        fileType: 'variant',
+                        sourcePrefabGuid: sourcePrefabGuid,
+                        gameObjectName: sourceRef.gameObjectName ? sourceRef.gameObjectName + ' (inherited)' : '(inherited)'
+                    });
+                    this.scriptIndex.set(sourceRef.scriptGuid, existing);
+                    console.log(`[UnityRefLens]   Added inherited script reference for ${sourceRef.scriptGuid}`);
+                }
+            }
+        }
+
+        console.log(`[UnityRefLens] Variant script resolution complete`);
+    }
+
+    /**
      * Index a single Unity file
      */
     private async indexFile(filePath: string): Promise<void> {
@@ -246,6 +349,19 @@ export class ReferenceIndexService {
             // Parse the file for script references (class usage)
             const scriptRefs = parseUnityFileForScripts(filePath);
             this.addScriptReferencesToIndex(scriptRefs);
+            
+            // Track variant and its source prefab for later resolution
+            if (scriptRefs.length > 0 && scriptRefs[0].fileType === 'variant' && scriptRefs[0].sourcePrefabGuid) {
+                this.variantSources.set(filePath, scriptRefs[0].sourcePrefabGuid);
+            } else if (scriptRefs.length === 0 && filePath.endsWith('.prefab')) {
+                // Even if no scripts parsed, check if it's a variant
+                const content = fs.readFileSync(filePath, 'utf8');
+                const variantInfo = detectPrefabVariant(content);
+                if (variantInfo.isVariant && variantInfo.sourcePrefabGuid) {
+                    this.variantSources.set(filePath, variantInfo.sourcePrefabGuid);
+                    console.log(`[UnityRefLens] Detected variant without direct scripts: ${path.basename(filePath)}`);
+                }
+            }
 
             // Update cache
             this.fileCache.set(filePath, {

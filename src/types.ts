@@ -13,7 +13,7 @@ export interface MethodReference {
     /** Name of the file without path */
     fileName: string;
     /** Type of Unity file */
-    fileType: 'scene' | 'prefab';
+    fileType: 'scene' | 'prefab' | 'variant';
     /** Name of the GameObject containing the reference */
     gameObjectName?: string;
     /** Hierarchy path to the GameObject (e.g., "Canvas/Panel/Button") */
@@ -24,6 +24,8 @@ export interface MethodReference {
     referenceType: 'UnityEvent' | 'AnimationEvent' | 'CustomEvent';
     /** Line number in the Unity file where reference was found */
     lineNumber?: number;
+    /** Source prefab GUID (for variants) */
+    sourcePrefabGuid?: string;
 }
 
 /** Represents a reference to a C# script (class) attached to a GameObject */
@@ -35,13 +37,15 @@ export interface ScriptReference {
     /** Name of the file without path */
     fileName: string;
     /** Type of Unity file */
-    fileType: 'scene' | 'prefab';
+    fileType: 'scene' | 'prefab' | 'variant';
     /** Name of the GameObject the script is attached to */
     gameObjectName?: string;
     /** Hierarchy path to the GameObject */
     hierarchyPath?: string;
     /** Line number in the Unity file where the script component was found */
     lineNumber?: number;
+    /** Source prefab GUID (for variants) */
+    sourcePrefabGuid?: string;
 }
 
 /** Represents a parsed C# method in a file */

@@ -2,6 +2,18 @@
 
 All notable changes to the "Unity Reference CodeLens" extension will be documented in this file.
 
+## [1.2.0] - 2026-02-03
+
+### Added
+- **Prefab Variant Support**: Extension now detects and displays references from Prefab Variants
+- Inherited scripts from source prefabs are automatically resolved for variants
+- New icon indicators: `$(file)` for scenes, `$(package)` for prefabs, `$(git-branch)` for variants
+- Separate count display for scenes, prefabs, and variants in CodeLens
+
+### Improved
+- Enhanced prefab type detection using Unity's PrefabInstance structure
+- Better GUID mapping for prefab files to resolve variant inheritance chains
+
 ## [1.1.1] - 2026-01-29
 
 ### Fixed

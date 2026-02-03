@@ -1,11 +1,29 @@
 /**
  * Unity File Parser
- * Parses .unity (scene) and .prefab files to extract method references
+ * Parses .unity (scene), .prefab files, and prefab variants to extract method references
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { MethodReference, ScriptReference } from './types';
+
+/** Information about a Prefab Variant */
+export interface PrefabVariantInfo {
+    isVariant: boolean;
+    sourcePrefabGuid?: string;
+    sourcePrefabFileId?: string;
+}
+
+/** Represents a modification override in a Prefab Variant */
+interface ModificationOverride {
+    targetFileId: string;
+    propertyPath: string;
+    value: string;
+    objectReference?: {
+        fileId: string;
+        guid: string;
+    };
+}
 
 /** Represents a parsed Unity object */
 interface UnityObject {
@@ -25,6 +43,194 @@ interface GameObjectInfo {
 }
 
 /**
+ * Detect if a Unity file is a Prefab Variant and get source prefab info
+ * 
+ * Prefab Variant vs Regular Prefab with nested prefabs:
+ * - Variant: Has a PrefabInstance with m_TransformParent: {fileID: 0} (root is from another prefab)
+ *   The root PrefabInstance references the base prefab via m_SourcePrefab
+ * - Regular Prefab with nested: Has PrefabInstance blocks but none with m_TransformParent: {fileID: 0}
+ *   All PrefabInstances are children of the prefab's own root GameObject
+ */
+export function detectPrefabVariant(content: string): PrefabVariantInfo {
+    // A Prefab Variant has a PrefabInstance block with m_TransformParent: {fileID: 0}
+    // This means the root of the file comes from another prefab (the source)
+    // Regular prefabs with nested prefabs don't have this pattern
+    
+    // Look for the pattern: PrefabInstance followed by m_TransformParent: {fileID: 0}
+    const variantPattern = /--- !u!1001\s*&\d+\s*\nPrefabInstance:[\s\S]*?m_TransformParent:\s*\{fileID:\s*0\}/;
+    const isVariant = variantPattern.test(content);
+    
+    if (!isVariant) {
+        return { isVariant: false };
+    }
+    
+    // Extract source prefab GUID
+    const sourcePrefabRegex = /m_SourcePrefab:\s*\{fileID:\s*(\d+),\s*guid:\s*([a-f0-9]+)/;
+    const match = content.match(sourcePrefabRegex);
+    
+    if (match) {
+        return {
+            isVariant: true,
+            sourcePrefabFileId: match[1],
+            sourcePrefabGuid: match[2]
+        };
+    }
+    
+    return { isVariant: true };
+}
+
+/**
+ * Determine the file type based on extension and content
+ * - .unity files are scenes
+ * - .prefab files with root PrefabInstance (m_TransformParent: {fileID: 0}) are variants
+ * - .prefab files without root PrefabInstance are regular prefabs
+ */
+function determineFileType(filePath: string, content: string): 'scene' | 'prefab' | 'variant' {
+    if (filePath.endsWith('.unity')) {
+        return 'scene';
+    }
+    
+    // A Prefab Variant has a PrefabInstance with m_TransformParent: {fileID: 0}
+    const variantPattern = /--- !u!1001\s*&\d+\s*\nPrefabInstance:[\s\S]*?m_TransformParent:\s*\{fileID:\s*0\}/;
+    if (variantPattern.test(content)) {
+        return 'variant';
+    }
+    
+    return 'prefab';
+}
+
+/**
+ * Parse modification overrides from a Prefab Variant
+ * These are stored in m_Modifications array
+ */
+function parseModificationOverrides(lines: string[]): Map<string, ModificationOverride[]> {
+    const overrides = new Map<string, ModificationOverride[]>();
+    
+    let inModifications = false;
+    let currentModification: Partial<ModificationOverride> | null = null;
+    
+    const modificationsStartRegex = /m_Modifications:/;
+    const targetRegex = /target:\s*\{fileID:\s*(\d+)/;
+    const propertyPathRegex = /propertyPath:\s*(.+)/;
+    const valueRegex = /value:\s*(.+)/;
+    const objectReferenceRegex = /objectReference:\s*\{fileID:\s*(\d+),\s*guid:\s*([a-f0-9]+)/;
+    
+    for (const line of lines) {
+        if (modificationsStartRegex.test(line)) {
+            inModifications = true;
+            continue;
+        }
+        
+        // End of modifications section
+        if (inModifications && line.match(/^  m_\w+:/) && !line.includes('- target:')) {
+            inModifications = false;
+            continue;
+        }
+        
+        if (!inModifications) { continue; }
+        
+        // New modification entry
+        if (line.includes('- target:')) {
+            // Save previous modification
+            if (currentModification?.targetFileId && currentModification?.propertyPath) {
+                const existing = overrides.get(currentModification.targetFileId) || [];
+                existing.push(currentModification as ModificationOverride);
+                overrides.set(currentModification.targetFileId, existing);
+            }
+            
+            currentModification = {};
+            const targetMatch = line.match(targetRegex);
+            if (targetMatch) {
+                currentModification.targetFileId = targetMatch[1];
+            }
+            continue;
+        }
+        
+        if (!currentModification) { continue; }
+        
+        const propertyMatch = line.match(propertyPathRegex);
+        if (propertyMatch) {
+            currentModification.propertyPath = propertyMatch[1].trim();
+        }
+        
+        const valueMatch = line.match(valueRegex);
+        if (valueMatch) {
+            currentModification.value = valueMatch[1].trim();
+        }
+        
+        const objRefMatch = line.match(objectReferenceRegex);
+        if (objRefMatch) {
+            currentModification.objectReference = {
+                fileId: objRefMatch[1],
+                guid: objRefMatch[2]
+            };
+        }
+    }
+    
+    // Save last modification
+    if (currentModification?.targetFileId && currentModification?.propertyPath) {
+        const existing = overrides.get(currentModification.targetFileId) || [];
+        existing.push(currentModification as ModificationOverride);
+        overrides.set(currentModification.targetFileId, existing);
+    }
+    
+    return overrides;
+}
+
+/**
+ * Extract method references from Prefab Variant overrides
+ */
+function extractReferencesFromOverrides(
+    overrides: Map<string, ModificationOverride[]>,
+    filePath: string,
+    fileName: string,
+    variantInfo: PrefabVariantInfo
+): MethodReference[] {
+    const references: MethodReference[] = [];
+    
+    // Look for m_MethodName in property paths
+    const methodNamePattern = /m_PersistentCalls\.m_Calls\.Array\.data\[\d+\]\.m_MethodName/;
+    
+    for (const [targetFileId, modifications] of overrides) {
+        for (const mod of modifications) {
+            if (methodNamePattern.test(mod.propertyPath) && mod.value) {
+                const methodName = mod.value;
+                
+                if (methodName && methodName !== '' && !methodName.startsWith('Internal')) {
+                    // Try to find the associated target script
+                    let scriptGuid = '';
+                    
+                    // Look for corresponding m_Target modification
+                    const callIndex = mod.propertyPath.match(/data\[(\d+)\]/)?.[1];
+                    if (callIndex) {
+                        const targetMod = modifications.find(m => 
+                            m.propertyPath.includes(`data[${callIndex}].m_Target`) &&
+                            m.objectReference?.guid
+                        );
+                        if (targetMod?.objectReference) {
+                            scriptGuid = targetMod.objectReference.guid;
+                        }
+                    }
+                    
+                    references.push({
+                        methodName,
+                        scriptGuid,
+                        filePath,
+                        fileName,
+                        fileType: 'variant',
+                        referenceType: 'UnityEvent',
+                        componentName: 'Override',
+                        sourcePrefabGuid: variantInfo.sourcePrefabGuid
+                    });
+                }
+            }
+        }
+    }
+    
+    return references;
+}
+
+/**
  * Parse a Unity file (.unity or .prefab) and extract all method references
  * @param filePath Path to the Unity file
  * @returns Array of method references found in the file
@@ -39,10 +245,16 @@ export function parseUnityFile(filePath: string): MethodReference[] {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n');
     const fileName = path.basename(filePath);
-    const fileType: 'scene' | 'prefab' = filePath.endsWith('.unity') ? 'scene' : 'prefab';
+    const fileType = determineFileType(filePath, content);
+    const variantInfo = detectPrefabVariant(content);
 
     // First pass: Build a map of all objects (GameObjects and their relationships)
     const objectMap = buildObjectMap(lines);
+    
+    // For variants, also parse modification overrides
+    const modificationOverrides = fileType === 'variant' 
+        ? parseModificationOverrides(lines) 
+        : new Map<string, ModificationOverride[]>();
     
     // Second pass: Find all method references
     let currentObjectFileId: string | undefined;
@@ -104,7 +316,8 @@ export function parseUnityFile(filePath: string): MethodReference[] {
                     hierarchyPath,
                     componentName: currentComponentType || detectComponentType(lines, i),
                     referenceType: 'UnityEvent',
-                    lineNumber: i + 1
+                    lineNumber: i + 1,
+                    sourcePrefabGuid: variantInfo.sourcePrefabGuid
                 });
             }
         }
@@ -128,10 +341,17 @@ export function parseUnityFile(filePath: string): MethodReference[] {
                     hierarchyPath,
                     componentName: 'Animation',
                     referenceType: 'AnimationEvent',
-                    lineNumber: i + 1
+                    lineNumber: i + 1,
+                    sourcePrefabGuid: variantInfo.sourcePrefabGuid
                 });
             }
         }
+    }
+
+    // For variants, also extract method references from modification overrides
+    if (fileType === 'variant') {
+        const overrideRefs = extractReferencesFromOverrides(modificationOverrides, filePath, fileName, variantInfo);
+        references.push(...overrideRefs);
     }
 
     return references;
@@ -385,6 +605,135 @@ export function hasScriptReference(filePath: string, scriptGuid: string): boolea
 }
 
 /**
+ * Parse added components from a Prefab Variant
+ * Components added to a variant are stored in m_AddedComponents
+ */
+function parseAddedComponents(
+    lines: string[],
+    filePath: string,
+    fileName: string,
+    variantInfo: PrefabVariantInfo
+): ScriptReference[] {
+    const references: ScriptReference[] = [];
+    
+    let inAddedComponents = false;
+    const addedComponentsRegex = /m_AddedComponents:/;
+    const componentRegex = /component:\s*\{fileID:\s*(\d+)/;
+    const scriptGuidRegex = /m_Script:\s*\{fileID:\s*\d+,\s*guid:\s*([a-f0-9]+)/;
+    
+    // First, find all added component fileIds
+    const addedComponentIds: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        if (addedComponentsRegex.test(line)) {
+            inAddedComponents = true;
+            continue;
+        }
+        
+        if (inAddedComponents) {
+            if (line.match(/^  m_\w+:/) && !line.includes('- targetCorrespondingSourceObject:')) {
+                inAddedComponents = false;
+                continue;
+            }
+            
+            const componentMatch = line.match(componentRegex);
+            if (componentMatch) {
+                addedComponentIds.push(componentMatch[1]);
+            }
+        }
+    }
+    
+    // Now find these components and extract script GUIDs
+    const objectHeaderRegex = /^--- !u!114\s*&(\d+)/;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const headerMatch = line.match(objectHeaderRegex);
+        
+        if (headerMatch && addedComponentIds.includes(headerMatch[1])) {
+            // This is an added MonoBehaviour
+            for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
+                const nextLine = lines[j];
+                if (nextLine.startsWith('---')) break;
+                
+                const guidMatch = nextLine.match(scriptGuidRegex);
+                if (guidMatch && guidMatch[1] !== '0') {
+                    references.push({
+                        scriptGuid: guidMatch[1],
+                        filePath,
+                        fileName,
+                        fileType: 'variant',
+                        lineNumber: i + 1,
+                        sourcePrefabGuid: variantInfo.sourcePrefabGuid
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    
+    return references;
+}
+
+/**
+ * Parse script references from a Prefab Variant
+ * In variants, scripts are inherited from the source prefab via PrefabInstance
+ * We search for ALL m_Script references in the file with valid GUIDs
+ */
+function parseVariantScriptReferences(
+    lines: string[],
+    filePath: string,
+    fileName: string,
+    variantInfo: PrefabVariantInfo
+): ScriptReference[] {
+    const references: ScriptReference[] = [];
+    const foundGuids = new Set<string>();
+    
+    // Find ALL m_Script references in the file
+    // This covers: stripped components, regular components, added components, etc.
+    const scriptGuidRegex = /m_Script:\s*\{fileID:\s*\d+,\s*guid:\s*([a-f0-9]+)/g;
+    const content = lines.join('\n');
+    
+    let match;
+    while ((match = scriptGuidRegex.exec(content)) !== null) {
+        const guid = match[1];
+        if (guid && guid !== '0' && !foundGuids.has(guid)) {
+            foundGuids.add(guid);
+            
+            // Find line number
+            const beforeMatch = content.substring(0, match.index);
+            const lineNumber = beforeMatch.split('\n').length;
+            
+            references.push({
+                scriptGuid: guid,
+                filePath,
+                fileName,
+                fileType: 'variant',
+                lineNumber,
+                sourcePrefabGuid: variantInfo.sourcePrefabGuid
+            });
+        }
+    }
+    
+    // Also check m_CorrespondingSourceObject references for inherited MonoBehaviours
+    // These point to components in the source prefab
+    // Format: m_CorrespondingSourceObject: {fileID: xxx, guid: SOURCE_PREFAB_GUID, type: 3}
+    // The component inherits scripts from that source
+    const correspondingRegex = /--- !u!114\s*&\d+[^\n]*\nMonoBehaviour:\s*\n\s*m_CorrespondingSourceObject:\s*\{fileID:\s*\d+,\s*guid:\s*([a-f0-9]+)/g;
+    
+    while ((match = correspondingRegex.exec(content)) !== null) {
+        // This MonoBehaviour inherits from source prefab
+        // The source prefab GUID is in variantInfo.sourcePrefabGuid
+        // We mark this variant as having inherited scripts
+        // The actual script resolution will happen via the source prefab
+    }
+    
+    return references;
+}
+
+/**
  * Parse a Unity file and extract all script component references (MonoBehaviour)
  * @param filePath Path to the Unity file
  * @returns Array of script references found in the file
@@ -399,12 +748,13 @@ export function parseUnityFileForScripts(filePath: string): ScriptReference[] {
     const content = fs.readFileSync(filePath, 'utf8');
     const lines = content.split('\n');
     const fileName = path.basename(filePath);
-    const fileType: 'scene' | 'prefab' = filePath.endsWith('.unity') ? 'scene' : 'prefab';
+    const fileType = determineFileType(filePath, content);
+    const variantInfo = detectPrefabVariant(content);
 
     // Build object map for hierarchy
     const objectMap = buildObjectMap(lines);
 
-    // Find all MonoBehaviour components (classId 114)
+    // Find all MonoBehaviour components (classId 114) - both normal and stripped
     const objectHeaderRegex = /^--- !u!114\s*&(\d+)/;
     const scriptGuidRegex = /m_Script:\s*\{fileID:\s*\d+,\s*guid:\s*([a-f0-9]+)/;
     const gameObjectRefRegex = /m_GameObject:\s*\{fileID:\s*(\d+)/;
@@ -454,9 +804,37 @@ export function parseUnityFileForScripts(filePath: string): ScriptReference[] {
                         fileType,
                         gameObjectName: gameObjectInfo?.name,
                         hierarchyPath,
-                        lineNumber: i + 1
+                        lineNumber: i + 1,
+                        sourcePrefabGuid: variantInfo.sourcePrefabGuid
                     });
                 }
+            }
+        }
+    }
+
+    // For variants, also check for added components in m_AddedComponents
+    if (fileType === 'variant') {
+        const addedComponentRefs = parseAddedComponents(lines, filePath, fileName, variantInfo);
+        
+        // Deduplicate
+        for (const ref of addedComponentRefs) {
+            const isDuplicate = references.some(r => 
+                r.scriptGuid === ref.scriptGuid && 
+                r.gameObjectName === ref.gameObjectName &&
+                r.hierarchyPath === ref.hierarchyPath
+            );
+            if (!isDuplicate) {
+                references.push(ref);
+            }
+        }
+        
+        // Also parse stripped MonoBehaviour references (inherited from base prefab)
+        const strippedRefs = parseVariantScriptReferences(lines, filePath, fileName, variantInfo);
+        
+        for (const ref of strippedRefs) {
+            const isDuplicate = references.some(r => r.scriptGuid === ref.scriptGuid);
+            if (!isDuplicate) {
+                references.push(ref);
             }
         }
     }

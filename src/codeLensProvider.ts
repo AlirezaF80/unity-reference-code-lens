@@ -142,10 +142,12 @@ export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
     private formatScriptTitle(references: ScriptReference[]): string {
         const sceneCount = references.filter(r => r.fileType === 'scene').length;
         const prefabCount = references.filter(r => r.fileType === 'prefab').length;
+        const variantCount = references.filter(r => r.fileType === 'variant').length;
         
         const parts: string[] = [];
         if (sceneCount > 0) parts.push(`${sceneCount} scene${sceneCount !== 1 ? 's' : ''}`);
         if (prefabCount > 0) parts.push(`${prefabCount} prefab${prefabCount !== 1 ? 's' : ''}`);
+        if (variantCount > 0) parts.push(`${variantCount} variant${variantCount !== 1 ? 's' : ''}`);
         
         return `Used in ${parts.join(', ')}`;
     }
@@ -185,20 +187,23 @@ export async function showReferencesCommand(
     }
 
     const items: ReferenceQuickPickItem[] = references.map(ref => {
-        // Build label with file and GameObject info
+        // Build label with file and GameObject info, include file type icon
+        const fileTypeIcon = ref.fileType === 'scene' ? '$(file)' : 
+                            ref.fileType === 'variant' ? '$(git-branch)' : '$(package)';
         const label = ref.gameObjectName 
-            ? `${ref.fileName} → ${ref.gameObjectName}`
-            : ref.fileName;
+            ? `${fileTypeIcon} ${ref.fileName} → ${ref.gameObjectName}`
+            : `${fileTypeIcon} ${ref.fileName}`;
         
         // Description with hierarchy path
         const description = ref.hierarchyPath && ref.hierarchyPath !== ref.gameObjectName
             ? ref.hierarchyPath
             : undefined;
         
-        // Detail with component type and line number
+        // Detail with component type, line number, and file type
         const componentInfo = ref.componentName ? `[${ref.componentName}]` : '';
         const lineInfo = ref.lineNumber ? `Line ${ref.lineNumber}` : '';
-        const detail = [componentInfo, ref.referenceType, lineInfo].filter(Boolean).join(' • ');
+        const typeInfo = ref.fileType === 'variant' ? 'Variant' : ref.fileType === 'scene' ? 'Scene' : 'Prefab';
+        const detail = [componentInfo, ref.referenceType, typeInfo, lineInfo].filter(Boolean).join(' • ');
 
         return {
             label,
@@ -208,11 +213,14 @@ export async function showReferencesCommand(
         };
     });
 
-    // Sort items: scenes first, then by file name, then by hierarchy
+    // Sort items: scenes first, then prefabs, then variants, then by file name
     items.sort((a, b) => {
-        // Scenes before prefabs
-        if (a.reference.fileType !== b.reference.fileType) {
-            return a.reference.fileType === 'scene' ? -1 : 1;
+        const typeOrder = { scene: 0, prefab: 1, variant: 2 };
+        const aOrder = typeOrder[a.reference.fileType];
+        const bOrder = typeOrder[b.reference.fileType];
+        
+        if (aOrder !== bOrder) {
+            return aOrder - bOrder;
         }
         // Then by file name
         const fileCompare = a.reference.fileName.localeCompare(b.reference.fileName);
@@ -270,15 +278,19 @@ export async function showScriptReferencesCommand(
     }
 
     const items: ScriptRefQuickPickItem[] = references.map(ref => {
+        const fileTypeIcon = ref.fileType === 'scene' ? '$(file)' : 
+                            ref.fileType === 'variant' ? '$(git-branch)' : '$(package)';
         const label = ref.gameObjectName 
-            ? `${ref.fileName} → ${ref.gameObjectName}`
-            : ref.fileName;
+            ? `${fileTypeIcon} ${ref.fileName} → ${ref.gameObjectName}`
+            : `${fileTypeIcon} ${ref.fileName}`;
         
         const description = ref.hierarchyPath && ref.hierarchyPath !== ref.gameObjectName
             ? ref.hierarchyPath
             : undefined;
         
-        const detail = `${ref.fileType === 'scene' ? 'Scene' : 'Prefab'}${ref.lineNumber ? ` • Line ${ref.lineNumber}` : ''}`;
+        const typeLabel = ref.fileType === 'scene' ? 'Scene' : 
+                         ref.fileType === 'variant' ? 'Prefab Variant' : 'Prefab';
+        const detail = `${typeLabel}${ref.lineNumber ? ` • Line ${ref.lineNumber}` : ''}`;
 
         return {
             label,
@@ -288,10 +300,14 @@ export async function showScriptReferencesCommand(
         };
     });
 
-    // Sort: scenes first, then by file name
+    // Sort: scenes first, then prefabs, then variants
     items.sort((a, b) => {
-        if (a.reference.fileType !== b.reference.fileType) {
-            return a.reference.fileType === 'scene' ? -1 : 1;
+        const typeOrder = { scene: 0, prefab: 1, variant: 2 };
+        const aOrder = typeOrder[a.reference.fileType];
+        const bOrder = typeOrder[b.reference.fileType];
+        
+        if (aOrder !== bOrder) {
+            return aOrder - bOrder;
         }
         return a.reference.fileName.localeCompare(b.reference.fileName);
     });

@@ -1,8 +1,8 @@
 {
   "name": "unity-reference-code-lens",
   "displayName": "Unity Reference CodeLens",
-  "description": "Shows Unity references (prefabs, scenes, buttons, GameObjects) on C# methods and classes as CodeLens",
-  "version": "1.1.1",
+  "description": "Shows Unity references (prefabs, scenes, variants, buttons, GameObjects) on C# methods and classes as CodeLens",
+  "version": "1.2.0",
   "publisher": "AkiraGameDev",
   "license": "MIT",
   "repository": {
