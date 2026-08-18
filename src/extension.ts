@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { UnityReferenceCodeLensProvider, showReferencesCommand, showScriptReferencesCommand } from './codeLensProvider';
+import { UnityReferenceProvider } from './referenceProvider';
 import { getReferenceIndexService, disposeReferenceIndexService } from './referenceIndex';
 
 let codeLensProvider: UnityReferenceCodeLensProvider | undefined;
@@ -17,6 +18,12 @@ export async function activate(context: vscode.ExtensionContext) {
         codeLensProvider
     );
     context.subscriptions.push(codeLensRegistration);
+
+    const referenceProvider = vscode.languages.registerReferenceProvider(
+        { language: 'csharp', scheme: 'file' },
+        new UnityReferenceProvider()
+    );
+    context.subscriptions.push(referenceProvider);
 
     // Register command to show references
     const showReferencesCmd = vscode.commands.registerCommand(

@@ -8,6 +8,7 @@ import * as path from 'path';
 import { parseCSharpMethods, parseCSharpClasses } from './csharpParser';
 import { getReferenceIndexService } from './referenceIndex';
 import { MethodReference, ScriptReference } from './types';
+import { methodRefsToLocations, scriptRefsToLocations } from './unityLocations';
 
 export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
     private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -63,8 +64,8 @@ export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 const codeLens = new vscode.CodeLens(range);
                 codeLens.command = {
                     title: this.formatScriptTitle(scriptReferences),
-                    command: 'unity-reference-code-lens.showScriptReferences',
-                    arguments: [scriptReferences, cls.name]
+                    command: 'editor.action.showReferences',
+                    arguments: [document.uri, range.start, scriptRefsToLocations(scriptReferences)]
                 };
 
                 codeLenses.push(codeLens);
@@ -92,8 +93,8 @@ export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 // Add command with reference info
                 codeLens.command = {
                     title: this.formatTitle(references),
-                    command: 'unity-reference-code-lens.showReferences',
-                    arguments: [references, method.name]
+                    command: 'editor.action.showReferences',
+                    arguments: [document.uri, range.start, methodRefsToLocations(references)]
                 };
 
                 codeLenses.push(codeLens);

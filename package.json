@@ -1,18 +1,18 @@
 {
   "name": "unity-reference-code-lens",
   "displayName": "Unity Reference CodeLens",
-  "description": "Shows Unity references (prefabs, scenes, variants, buttons, GameObjects) on C# methods and classes as CodeLens",
-  "version": "1.2.0",
+  "description": "Shows Unity prefab/scene references as CodeLens and in Go to References (Shift+F12)",
+  "version": "1.3.0",
   "publisher": "AkiraGameDev",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CQuangX/unity-reference-code-lens"
+    "url": "https://github.com/AlirezaF80/unity-reference-code-lens"
   },
   "bugs": {
-    "url": "https://github.com/CQuangX/unity-reference-code-lens/issues"
+    "url": "https://github.com/AlirezaF80/unity-reference-code-lens/issues"
   },
-  "homepage": "https://github.com/CQuangX/unity-reference-code-lens#readme",
+  "homepage": "https://github.com/AlirezaF80/unity-reference-code-lens#readme",
   "galleryBanner": {
     "color": "#1e1e1e",
     "theme": "dark"

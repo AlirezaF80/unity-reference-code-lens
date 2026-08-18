@@ -4,7 +4,8 @@ Display Unity references directly on your C# methods - instantly see which scene
 
 ## Features
 
-- **CodeLens on Methods**: See reference counts directly above your C# methods
+- **Go to References (Shift+F12)**: Prefab and scene hits show up in the same references peek as C# callers
+- **CodeLens on Methods**: See reference counts directly above your C# methods (click opens the same peek)
 - **Detailed Information**: Click to view file name, GameObject name, and hierarchy path
 - **Auto-Detection**: Automatically scans `.unity` (scene) and `.prefab` files
 - **Real-time Updates**: File watcher updates references when Unity files change
@@ -54,35 +55,43 @@ This extension contributes the following settings:
 
 ## Release Notes
 
+### 1.3.0 (this fork)
+
+- Go to References (Shift+F12) includes Unity prefab and scene usages, merged with C# callers
+- CodeLens clicks open the same peek view instead of a QuickPick
+
+### 1.2.0
+
+- Prefab variant support, including inherited scripts from the source prefab
+- Scene / prefab / variant counts and icons in CodeLens
+
+### 1.1.1
+
+- Deduped duplicate script references on the same GameObject
+
+### 1.1.0
+
+- CodeLens on class declarations for scene/prefab script usage
+
 ### 1.0.0
 
-Initial release:
-- CodeLens for C# methods referenced in Unity files
-- Support for scenes (.unity) and prefabs (.prefab)
-- Hierarchy path display
-- Real-time file watching
+- Initial release: CodeLens for methods in scenes and prefabs, hierarchy path, file watching
 
----
+## Install this fork
 
-**Enjoy!**
+```powershell
+cd D:\Projects\unity-reference-code-lens
+npm install
+npm run compile
+npx --yes @vscode/vsce package
+```
 
-## Following extension guidelines
+In Cursor: Command Palette → **Extensions: Install from VSIX...** → pick the `.vsix` in this folder.
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+Uninstall the marketplace copy first if both would run at once.
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+## Credits
 
-## Working with Markdown
+Original extension by **QuangCan** ([CQuangX](https://github.com/CQuangX)), published on the VS Marketplace as **AkiraGameDev**.
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Upstream: [CQuangX/unity-reference-code-lens](https://github.com/CQuangX/unity-reference-code-lens)

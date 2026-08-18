@@ -2,6 +2,12 @@
 
 All notable changes to the "Unity Reference CodeLens" extension will be documented in this file.
 
+## [1.3.0] - 2026-08-18
+
+### Added
+- **Go to References (Shift+F12)**: Unity prefab and scene usages are included in the native references peek, merged with C# callers
+- CodeLens clicks open the same peek view instead of a QuickPick
+
 ## [1.2.0] - 2026-02-03
 
 ### Added
