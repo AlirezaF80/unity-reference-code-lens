@@ -2,6 +2,29 @@
 
 All notable changes to the "Unity Reference CodeLens" extension will be documented in this file.
 
+## [1.5.0] - 2026-08-18
+
+### Added
+- Ping handshake with Unity (Ping/Pong) before ShowUsage, with a clear error if the Visual Studio Editor UDP listener is down
+
+### Fixed
+- Method CodeLens no longer matches UnityEvents by method name alone (e.g. `Initialize` on the wrong script)
+- ShowUsage uses `Assets/...` paths so Unity can resolve the prefab
+- Detects all running Unity.exe processes when choosing a messaging port
+
+### Note
+Remove the legacy `com.unity.ide.vscode` package. Keep `com.unity.ide.visualstudio` 2.0.22. That old package can steal editor registration at startup so the UDP listener never binds.
+
+## [1.4.0] - 2026-08-18
+
+### Added
+- **Show in Unity Editor**: pings the prefab/scene in a running Unity Editor via `com.unity.ide.visualstudio` ShowUsage
+- CodeLens / QuickPick selection pings Unity instead of opening YAML
+- Explorer context menu: Show in Unity Editor
+
+### Note
+Unity must be running this project, and External Script Editor must be Visual Studio, VS Code, or Cursor so the Visual Studio Editor package listener is enabled.
+
 ## [1.3.0] - 2026-08-18
 
 ### Added

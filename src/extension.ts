@@ -4,7 +4,7 @@
  */
 
 import * as vscode from 'vscode';
-import { UnityReferenceCodeLensProvider, showReferencesCommand, showScriptReferencesCommand } from './codeLensProvider';
+import { UnityReferenceCodeLensProvider, showReferencesCommand, showScriptReferencesCommand, showInEditorCommand } from './codeLensProvider';
 import { UnityReferenceProvider } from './referenceProvider';
 import { getReferenceIndexService, disposeReferenceIndexService } from './referenceIndex';
 
@@ -62,6 +62,12 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
     context.subscriptions.push(showStatusCmd);
+
+    const showInEditorCmd = vscode.commands.registerCommand(
+        'unity-reference-code-lens.showInEditor',
+        showInEditorCommand
+    );
+    context.subscriptions.push(showInEditorCmd);
 
     // Build index on activation
     await buildIndexWithProgress();

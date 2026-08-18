@@ -4,11 +4,10 @@
  */
 
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { parseCSharpMethods, parseCSharpClasses } from './csharpParser';
 import { getReferenceIndexService } from './referenceIndex';
 import { MethodReference, ScriptReference } from './types';
-import { methodRefsToLocations, scriptRefsToLocations } from './unityLocations';
+import { showAssetInUnityEditorOrWarn } from './unityMessaging';
 
 export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
     private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -64,8 +63,8 @@ export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 const codeLens = new vscode.CodeLens(range);
                 codeLens.command = {
                     title: this.formatScriptTitle(scriptReferences),
-                    command: 'editor.action.showReferences',
-                    arguments: [document.uri, range.start, scriptRefsToLocations(scriptReferences)]
+                    command: 'unity-reference-code-lens.showScriptReferences',
+                    arguments: [scriptReferences, cls.name]
                 };
 
                 codeLenses.push(codeLens);
@@ -93,8 +92,8 @@ export class UnityReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 // Add command with reference info
                 codeLens.command = {
                     title: this.formatTitle(references),
-                    command: 'editor.action.showReferences',
-                    arguments: [document.uri, range.start, methodRefsToLocations(references)]
+                    command: 'unity-reference-code-lens.showReferences',
+                    arguments: [references, method.name]
                 };
 
                 codeLenses.push(codeLens);
@@ -232,33 +231,16 @@ export async function showReferencesCommand(
 
     const selected = await vscode.window.showQuickPick(items, {
         title: `Unity References: ${methodName}()`,
-        placeHolder: `Found ${references.length} reference${references.length !== 1 ? 's' : ''} - Click to open location`,
+        placeHolder: `Found ${references.length} reference${references.length !== 1 ? 's' : ''} - Click to ping in Unity Editor`,
         matchOnDescription: true,
         matchOnDetail: true
     });
 
     if (selected) {
-        // Open the Unity file at the reference location
-        const uri = vscode.Uri.file(selected.reference.filePath);
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const editor = await vscode.window.showTextDocument(doc);
-
-        if (selected.reference.lineNumber) {
-            const line = selected.reference.lineNumber - 1;
-            const range = new vscode.Range(line, 0, line, 0);
-            editor.selection = new vscode.Selection(range.start, range.start);
-            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-            
-            // Highlight the line briefly
-            const decoration = vscode.window.createTextEditorDecorationType({
-                backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
-                isWholeLine: true
-            });
-            editor.setDecorations(decoration, [range]);
-            
-            // Remove highlight after 2 seconds
-            setTimeout(() => decoration.dispose(), 2000);
-        }
+        await showAssetInUnityEditorOrWarn(
+            selected.reference.filePath,
+            selected.reference.hierarchyPath
+        );
     }
 }
 
@@ -315,28 +297,46 @@ export async function showScriptReferencesCommand(
 
     const selected = await vscode.window.showQuickPick(items, {
         title: `Unity References: ${className}`,
-        placeHolder: `Found ${references.length} usage${references.length !== 1 ? 's' : ''} - Click to open location`,
+        placeHolder: `Found ${references.length} usage${references.length !== 1 ? 's' : ''} - Click to ping in Unity Editor`,
         matchOnDescription: true,
         matchOnDetail: true
     });
 
     if (selected) {
-        const uri = vscode.Uri.file(selected.reference.filePath);
-        const doc = await vscode.workspace.openTextDocument(uri);
-        const editor = await vscode.window.showTextDocument(doc);
-
-        if (selected.reference.lineNumber) {
-            const line = selected.reference.lineNumber - 1;
-            const range = new vscode.Range(line, 0, line, 0);
-            editor.selection = new vscode.Selection(range.start, range.start);
-            editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-            
-            const decoration = vscode.window.createTextEditorDecorationType({
-                backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
-                isWholeLine: true
-            });
-            editor.setDecorations(decoration, [range]);
-            setTimeout(() => decoration.dispose(), 2000);
-        }
+        await showAssetInUnityEditorOrWarn(
+            selected.reference.filePath,
+            selected.reference.hierarchyPath
+        );
     }
+}
+
+const unityAssetExtensions = new Set(['.prefab', '.unity', '.asset']);
+
+export async function showInEditorCommand(uri?: vscode.Uri): Promise<void> {
+    const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+    if (!targetUri || targetUri.scheme !== 'file') {
+        vscode.window.showInformationMessage('Open a Unity asset or C# script first.');
+        return;
+    }
+
+    const extension = targetUri.fsPath.substring(targetUri.fsPath.lastIndexOf('.')).toLowerCase();
+    if (unityAssetExtensions.has(extension)) {
+        await showAssetInUnityEditorOrWarn(targetUri.fsPath);
+        return;
+    }
+
+    if (extension !== '.cs') {
+        vscode.window.showInformationMessage('Show in Unity Editor works on .prefab, .unity, .asset, or C# scripts.');
+        return;
+    }
+
+    const indexService = getReferenceIndexService();
+    const scriptGuid = indexService.getScriptGuid(targetUri.fsPath);
+    if (!scriptGuid) {
+        vscode.window.showInformationMessage('No Unity script GUID found for this file.');
+        return;
+    }
+
+    const className = targetUri.fsPath.replace(/^.*[\\/]/, '').replace(/\.cs$/i, '');
+    await showScriptReferencesCommand(indexService.getScriptReferences(scriptGuid), className);
 }

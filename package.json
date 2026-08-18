@@ -1,8 +1,8 @@
 {
   "name": "unity-reference-code-lens",
   "displayName": "Unity Reference CodeLens",
-  "description": "Shows Unity prefab/scene references as CodeLens and in Go to References (Shift+F12)",
-  "version": "1.3.0",
+  "description": "Shows Unity prefab/scene references as CodeLens, Go to References, and ping in the Unity Editor",
+  "version": "1.5.0",
   "publisher": "AkiraGameDev",
   "license": "MIT",
   "repository": {
@@ -62,8 +62,28 @@
         "command": "unity-reference-code-lens.showStatus",
         "title": "Show Index Status",
         "category": "Unity"
+      },
+      {
+        "command": "unity-reference-code-lens.showInEditor",
+        "title": "Show in Unity Editor",
+        "category": "Unity"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "unity-reference-code-lens.showInEditor",
+          "when": "resourceExtname == .prefab || resourceExtname == .unity || resourceExtname == .asset || resourceExtname == .cs",
+          "group": "navigation@90"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "unity-reference-code-lens.showInEditor",
+          "when": "resourceExtname == .prefab || resourceExtname == .unity || resourceExtname == .asset || resourceExtname == .cs"
+        }
+      ]
+    },
     "configuration": {
       "title": "Unity Reference CodeLens",
       "properties": {

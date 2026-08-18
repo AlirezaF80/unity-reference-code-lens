@@ -5,7 +5,8 @@ Display Unity references directly on your C# methods - instantly see which scene
 ## Features
 
 - **Go to References (Shift+F12)**: Prefab and scene hits show up in the same references peek as C# callers
-- **CodeLens on Methods**: See reference counts directly above your C# methods (click opens the same peek)
+- **Show in Unity Editor**: Ping the prefab/scene in a running Unity Editor (Visual Studio Editor protocol)
+- **CodeLens on Methods**: See reference counts; click to pick a usage and ping it in Unity
 - **Detailed Information**: Click to view file name, GameObject name, and hierarchy path
 - **Auto-Detection**: Automatically scans `.unity` (scene) and `.prefab` files
 - **Real-time Updates**: File watcher updates references when Unity files change
@@ -33,11 +34,13 @@ This extension contributes the following settings:
 
 * `Unity: Rebuild Reference Index` - Manually rebuild the reference index
 * `Unity: Show Index Status` - Show current index status and reference count
+* `Unity: Show in Unity Editor` - Ping the current asset (or pick a script usage) in the running Editor
 
 ## Requirements
 
 - VS Code 1.108.1 or higher
 - A Unity project with `.cs`, `.unity`, and/or `.prefab` files
+- For ping: Unity running, External Script Editor = Visual Studio Code, **Visual Studio Editor 2.0.22** enabled. Remove the legacy **Visual Studio Code Editor** (`com.unity.ide.vscode`) package or the UDP listener never starts.
 
 ## Supported Reference Types
 
@@ -52,8 +55,22 @@ This extension contributes the following settings:
 
 - Large projects may take a few seconds to index on first load
 - Hierarchy path may not be complete for deeply nested GameObjects
+- Prefab ping highlights the asset in the Project window, not a nested GameObject
+- Ping needs the Visual Studio Editor package listener; the legacy vscode package blocks it
 
 ## Release Notes
+
+### 1.5.0 (this fork)
+
+- Ping/Pong handshake and `Assets/` paths for ShowUsage
+- Method references match by script GUID only (no more false `Initialize` hits)
+- Requires removing legacy `com.unity.ide.vscode`
+
+### 1.4.0 (this fork)
+
+- Ping prefab/scene in the Unity Editor via Visual Studio Editor ShowUsage
+- CodeLens pick list pings Unity; explorer context menu: Show in Unity Editor
+- Requires External Script Editor = Visual Studio / VS Code / Cursor and a running Editor
 
 ### 1.3.0 (this fork)
 

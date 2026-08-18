@@ -404,20 +404,14 @@ export class ReferenceIndexService {
      */
     private addReferencesToIndex(references: MethodReference[]): void {
         for (const ref of references) {
-            // Always add with scriptGuid:methodName key if we have guid
-            if (ref.scriptGuid) {
-                const keyWithGuid = `${ref.scriptGuid}:${ref.methodName}`;
-                const existing = this.index.get(keyWithGuid) || [];
-                existing.push(ref);
-                this.index.set(keyWithGuid, existing);
+            if (!ref.scriptGuid) {
+                continue;
             }
-            
-            // ALSO always add with just methodName (empty guid prefix) for fallback matching
-            // This allows matching by method name when GUID resolution fails
-            const keyMethodOnly = `:${ref.methodName}`;
-            const existingMethodOnly = this.index.get(keyMethodOnly) || [];
-            existingMethodOnly.push(ref);
-            this.index.set(keyMethodOnly, existingMethodOnly);
+
+            const keyWithGuid = `${ref.scriptGuid}:${ref.methodName}`;
+            const existing = this.index.get(keyWithGuid) || [];
+            existing.push(ref);
+            this.index.set(keyWithGuid, existing);
         }
     }
 
@@ -428,20 +422,7 @@ export class ReferenceIndexService {
      * @returns Array of references
      */
     public getMethodReferences(scriptGuid: string, methodName: string): MethodReference[] {
-        const withGuid = this.index.get(`${scriptGuid}:${methodName}`) || [];
-        const withoutGuid = this.index.get(`:${methodName}`) || [];
-        
-        // Combine and deduplicate
-        const combined = [...withGuid];
-        
-        // Add method-only matches that don't have a conflicting GUID
-        for (const ref of withoutGuid) {
-            if (!ref.scriptGuid || ref.scriptGuid === scriptGuid) {
-                combined.push(ref);
-            }
-        }
-
-        return combined;
+        return this.index.get(`${scriptGuid}:${methodName}`) || [];
     }
 
     /**
@@ -456,29 +437,21 @@ export class ReferenceIndexService {
             const colonIndex = key.indexOf(':');
             const guid = key.substring(0, colonIndex);
             const methodName = key.substring(colonIndex + 1);
-            
-            // Match if:
-            // 1. GUID matches exactly
-            // 2. OR it's a method-only key (empty guid) - always include for method name matching
-            if (guid === scriptGuid || guid === '') {
-                // For method-only keys, include all refs (we'll dedupe later)
-                // For GUID keys, filter by GUID
-                const refsToAdd = guid === '' ? refs : refs.filter(r => !r.scriptGuid || r.scriptGuid === scriptGuid);
-                
-                if (refsToAdd.length > 0) {
-                    const existing = result.get(methodName) || [];
-                    // Deduplicate by filePath + lineNumber
-                    for (const ref of refsToAdd) {
-                        const isDuplicate = existing.some(e => 
-                            e.filePath === ref.filePath && e.lineNumber === ref.lineNumber
-                        );
-                        if (!isDuplicate) {
-                            existing.push(ref);
-                        }
-                    }
-                    result.set(methodName, existing);
+
+            if (guid !== scriptGuid) {
+                continue;
+            }
+
+            const existing = result.get(methodName) || [];
+            for (const ref of refs) {
+                const isDuplicate = existing.some(e =>
+                    e.filePath === ref.filePath && e.lineNumber === ref.lineNumber
+                );
+                if (!isDuplicate) {
+                    existing.push(ref);
                 }
             }
+            result.set(methodName, existing);
         }
 
         return result;
